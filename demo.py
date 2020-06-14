@@ -122,8 +122,19 @@ def main():
         # postprocess lines to remove overlapped lines
         diag = (im.shape[0] ** 2 + im.shape[1] ** 2) ** 0.5
         nlines, nscores = postprocess(lines, scores, diag * 0.01, 0, False)
+        
+        partExprotName = imname.split(".")[0]
+        exportName = partExprotName + ".txt"
+        with open(exportName , "w") as writeFile:
+            for i, t in enumerate([0.94]):
 
-        for i, t in enumerate([0.94, 0.95, 0.96, 0.97, 0.98, 0.99]):
+                for (a, b), s in zip(nlines, nscores):
+                    if s < t:
+                        continue
+                    print(a[1],  a[0], b[1] , b[0], file=writeFile)
+                    
+
+        '''for i, t in enumerate([0.94, 0.95, 0.96, 0.97, 0.98, 0.99]):
             plt.gca().set_axis_off()
             plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
             plt.margins(0, 0)
@@ -138,7 +149,7 @@ def main():
             plt.imshow(im)
             plt.savefig(imname.replace(".png", f"-{t:.02f}.svg"), bbox_inches="tight")
             plt.show()
-            plt.close()
+            plt.close()'''
 
 
 if __name__ == "__main__":
