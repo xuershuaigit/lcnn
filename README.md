@@ -1,3 +1,6 @@
+run the batch processing program, just navigate to the directory where the demo.py file is located, write "python demo.py -d 0 config/wireframe.yaml config/190418-201834-f8934c6-lr4d10-312k.pth.tar images" in the terminal
+
+
 # L-CNN — End-to-End Wireframe Parsing
 
 This repository contains the official PyTorch implementation of the paper:  *[Yichao Zhou](https://yichaozhou.com), [Haozhi Qi](http://haozhi.io), [Yi Ma](https://people.eecs.berkeley.edu/~yima/). ["End-to-End Wireframe Parsing."](https://arxiv.org/abs/1905.03246)  ICCV 2019*.
