@@ -18,13 +18,14 @@ import os
 import os.path as osp
 import pprint
 import random
-
+import shutil
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import skimage.io
 import skimage.transform
 import torch
+import glob
 import yaml
 from docopt import docopt
 
@@ -83,73 +84,111 @@ def main():
     model = model.to(device)
     model.eval()
 
-    for imname in args["<images>"]:
-        print(f"Processing {imname}")
-        im = skimage.io.imread(imname)
-        if im.ndim == 2:
-            im = np.repeat(im[:, :, None], 3, 2)
-        im = im[:, :, :3]
-        im_resized = skimage.transform.resize(im, (512, 512)) * 255
-        image = (im_resized - M.image.mean) / M.image.stddev
-        image = torch.from_numpy(np.rollaxis(image, 2)[None].copy()).float()
-        with torch.no_grad():
-            input_dict = {
-                "image": image.to(device),
-                "meta": [
-                    {
-                        "junc": torch.zeros(1, 2).to(device),
-                        "jtyp": torch.zeros(1, dtype=torch.uint8).to(device),
-                        "Lpos": torch.zeros(2, 2, dtype=torch.uint8).to(device),
-                        "Lneg": torch.zeros(2, 2, dtype=torch.uint8).to(device),
+    # for imname in args["<images>"]:
+    for root, dirs, files in os.walk(r'images'):
+        for root_file in files:
+            path = os.path.join(root, root_file)
+            # print(path)
+            for imname in glob.glob(path):
+                print(f"Processing {imname}")
+                im = skimage.io.imread(imname)
+                if im.ndim == 2:
+                    im = np.repeat(im[:, :, None], 3, 2)
+                im = im[:, :, :3]
+                im_resized = skimage.transform.resize(im, (512, 512)) * 255
+                image = (im_resized - M.image.mean) / M.image.stddev
+                image = torch.from_numpy(np.rollaxis(image, 2)[None].copy()).float()
+                with torch.no_grad():
+                    input_dict = {
+                        "image": image.to(device),
+                        "meta": [
+                            {
+                                "junc": torch.zeros(1, 2).to(device),
+                                "jtyp": torch.zeros(1, dtype=torch.uint8).to(device),
+                                "Lpos": torch.zeros(2, 2, dtype=torch.uint8).to(device),
+                                "Lneg": torch.zeros(2, 2, dtype=torch.uint8).to(device),
+                            }
+                        ],
+                        "target": {
+                            "jmap": torch.zeros([1, 1, 128, 128]).to(device),
+                            "joff": torch.zeros([1, 1, 2, 128, 128]).to(device),
+                        },
+                        "mode": "testing",
                     }
-                ],
-                "target": {
-                    "jmap": torch.zeros([1, 1, 128, 128]).to(device),
-                    "joff": torch.zeros([1, 1, 2, 128, 128]).to(device),
-                },
-                "mode": "testing",
-            }
-            H = model(input_dict)["preds"]
+                    H = model(input_dict)["preds"]
 
-        lines = H["lines"][0].cpu().numpy() / 128 * im.shape[:2]
-        scores = H["score"][0].cpu().numpy()
-        for i in range(1, len(lines)):
-            if (lines[i] == lines[0]).all():
-                lines = lines[:i]
-                scores = scores[:i]
-                break
+                lines = H["lines"][0].cpu().numpy() / 128 * im.shape[:2]
+                scores = H["score"][0].cpu().numpy()
+                for i in range(1, len(lines)):
+                    if (lines[i] == lines[0]).all():
+                        lines = lines[:i]
+                        scores = scores[:i]
+                        break
 
-        # postprocess lines to remove overlapped lines
-        diag = (im.shape[0] ** 2 + im.shape[1] ** 2) ** 0.5
-        nlines, nscores = postprocess(lines, scores, diag * 0.01, 0, False)
-        
-        partExprotName = imname.split(".")[0]
-        exportName = partExprotName + ".txt"
-        with open(exportName , "w") as writeFile:
-            for i, t in enumerate([0.94]):
+                # postprocess lines to remove overlapped lines
+                diag = (im.shape[0] ** 2 + im.shape[1] ** 2) ** 0.5
+                nlines, nscores = postprocess(lines, scores, diag * 0.01, 0, False)
 
-                for (a, b), s in zip(nlines, nscores):
-                    if s < t:
-                        continue
-                    print(a[1],  a[0], b[1] , b[0], file=writeFile)
-                    
+                partExprotName = imname.split(".")[0]
+                exportName = partExprotName + ".txt"
+                with open(exportName, "w") as writeFile:
+                    for i, t in enumerate([0.94]):
+                        plt.gca().set_axis_off()
+                        plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+                        plt.margins(0, 0)
+                        for (a, b), s in zip(nlines, nscores):
+                            if s < t:
+                                continue
+                            print(a[1], a[0], b[1], b[0], file=writeFile)
+                        #     plt.plot([a[1], b[1]], [a[0], b[0]], c=c(s), linewidth=2, zorder=s)
+                        #     plt.scatter(a[1], a[0], **PLTOPTS)
+                        #     plt.scatter(b[1], b[0], **PLTOPTS)
+                        # plt.gca().xaxis.set_major_locator(plt.NullLocator())
+                        # plt.gca().yaxis.set_major_locator(plt.NullLocator())
+                        # plt.imshow(im)
+                        # plt.savefig(imname.replace(".png", f"-{t:.02f}.svg"), bbox_inches="tight")
+                        # plt.show()
+                        # plt.close()
 
-        '''for i, t in enumerate([0.94, 0.95, 0.96, 0.97, 0.98, 0.99]):
-            plt.gca().set_axis_off()
-            plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
-            plt.margins(0, 0)
-            for (a, b), s in zip(nlines, nscores):
-                if s < t:
-                    continue
-                plt.plot([a[1], b[1]], [a[0], b[0]], c=c(s), linewidth=2, zorder=s)
-                plt.scatter(a[1], a[0], **PLTOPTS)
-                plt.scatter(b[1], b[0], **PLTOPTS)
-            plt.gca().xaxis.set_major_locator(plt.NullLocator())
-            plt.gca().yaxis.set_major_locator(plt.NullLocator())
-            plt.imshow(im)
-            plt.savefig(imname.replace(".png", f"-{t:.02f}.svg"), bbox_inches="tight")
-            plt.show()
-            plt.close()'''
+    for new_root, new_dir, new_files in os.walk(r'images'):
+        # print(new_root)
+        for root_file1 in new_files:
+            path1 = os.path.join(new_root, root_file1)
+            for all_files in glob.glob(path1):
+                txtname1 = os.path.splitext(all_files)[1]
+                txtname0 = os.path.splitext(all_files)[0]
+                # print(txtname1, txtname0)
+                if txtname1 == '.txt':
+                    # old_path = os.path.join(new_root, all_files)
+                    new_path = 'results/'
+                    shutil.move(path1, new_path)
+
+                # txt_path = r"images/"
+                # filelist = os.listdir(txt_path)
+                # for files in filelist:
+                #     txtname1 = os.path.splitext(files)[1]
+                #     txtname0 = os.path.splitext(files)[0]
+                #     if txtname1 == '.txt':
+                #         old_path = os.path.join("images/", files)
+                #         new_path = "results/" + txtname0 + '.txt'
+                #         shutil.move(old_path, new_path)
+
+                # for i, t in enumerate([0.94, 0.95, 0.96, 0.97, 0.98, 0.99]):
+                #     plt.gca().set_axis_off()
+                #     plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+                #     plt.margins(0, 0)
+                #     for (a, b), s in zip(nlines, nscores):
+                #         if s < t:
+                #             continue
+                #         plt.plot([a[1], b[1]], [a[0], b[0]], c=c(s), linewidth=2, zorder=s)
+                #         plt.scatter(a[1], a[0], **PLTOPTS)
+                #         plt.scatter(b[1], b[0], **PLTOPTS)
+                #     plt.gca().xaxis.set_major_locator(plt.NullLocator())
+                #     plt.gca().yaxis.set_major_locator(plt.NullLocator())
+                #     plt.imshow(im)
+                #     plt.savefig(imname.replace(".png", f"-{t:.02f}.svg"), bbox_inches="tight")
+                #     plt.show()
+                #     plt.close()
 
 
 if __name__ == "__main__":
